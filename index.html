@@ -71,6 +71,7 @@ const PUZZLES = [
 const colors = ["yellow", "green", "blue", "purple"];
 const el = id => document.getElementById(id);
 let groups, remaining, selected, solved, mistakes, finished;
+const normalizeTerm = term => String(term).trim().toLowerCase();
 function shuffle(items) {
   const result = [...items];
   for (let i = result.length - 1; i > 0; i--) {
@@ -79,13 +80,54 @@ function shuffle(items) {
   }
   return result;
 }
+function validatePuzzle(puzzle) {
+  if (!puzzle || !Array.isArray(puzzle.groups)) return "round data is missing or invalid.";
+  if (puzzle.groups.length !== 4) return "use exactly four groups.";
+  const seenTerms = new Set();
+  for (const group of puzzle.groups) {
+    if (!group || !Array.isArray(group.terms)) return "each group must include a terms list.";
+    if (group.terms.length !== 4) return "each group must contain exactly four terms.";
+    if (typeof group.name !== "string" || !group.name.trim()) return "each group needs a category name.";
+    const groupTerms = new Set();
+    for (const term of group.terms) {
+      if (typeof term !== "string" || !term.trim()) return "each term must be non-empty text.";
+      const normalizedTerm = normalizeTerm(term);
+      if (groupTerms.has(normalizedTerm)) return "each group must use four distinct terms.";
+      if (seenTerms.has(normalizedTerm)) return "terms must be unique across the whole round.";
+      groupTerms.add(normalizedTerm);
+      seenTerms.add(normalizedTerm);
+    }
+  }
+  return "";
+}
+function showSetupError(message) {
+  groups = [];
+  remaining = [];
+  selected = new Set();
+  solved = [];
+  mistakes = 0;
+  finished = true;
+  el("title").textContent = "Vocabulary Connections";
+  el("mistakes").textContent = "0";
+  el("solved").replaceChildren();
+  el("board").replaceChildren();
+  el("keyContents").replaceChildren();
+  el("message").textContent = `Puzzle setup error: ${message}`;
+  el("submit").disabled = true;
+  el("shuffle").disabled = true;
+  el("deselect").disabled = true;
+}
 function start() {
   const puzzle = PUZZLES[Number(el("round").value)];
-  groups = puzzle.groups;
-  if (groups.length !== 4 || groups.some(g => g.terms.length !== 4) || new Set(groups.flatMap(g => g.terms)).size !== 16) {
-    el("message").textContent = "Puzzle setup error: use four groups of four unique terms.";
+  const error = validatePuzzle(puzzle);
+  if (error) {
+    showSetupError(error);
     return;
   }
+  groups = puzzle.groups.map(g => ({
+    name: g.name.trim(),
+    terms: g.terms.map(t => t.trim())
+  }));
   el("title").textContent = puzzle.title;
   remaining = shuffle(groups.flatMap(g => g.terms));
   selected = new Set(); solved = []; mistakes = 4; finished = false;
@@ -149,8 +191,14 @@ el("shuffle").addEventListener("click", () => { remaining = shuffle(remaining); 
 el("deselect").addEventListener("click", () => { selected.clear(); render("Selection cleared."); });
 el("restart").addEventListener("click", start);
 el("round").addEventListener("change", start);
-PUZZLES.forEach((p, i) => { const option = document.createElement("option"); option.value = i; option.textContent = `Round ${i + 1}`; el("round").append(option); });
-start();
+PUZZLES.forEach((p, i) => {
+  const option = document.createElement("option");
+  option.value = i;
+  option.textContent = p.title || `Round ${i + 1}`;
+  el("round").append(option);
+});
+if (PUZZLES.length) start();
+else showSetupError("add at least one round in PUZZLES.");
 </script>
 </body>
 </html>
