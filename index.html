@@ -139,7 +139,7 @@ el("submit").addEventListener("click", () => {
     return;
   }
   const oneAway = groups.some(g => !solved.includes(g) && g.terms.filter(t => selected.has(t)).length === 3);
-  mistakes--; selected.clear();
+  mistakes--;
   if (mistakes === 0) {
     finished = true; solved.push(...groups.filter(g => !solved.includes(g))); remaining = [];
     render("Game over. Review the groups above, then restart.");
