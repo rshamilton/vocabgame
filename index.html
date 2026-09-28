@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vocabulary Connections</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 0 16px; color: #242424; background: #faf9f6; }
+  h1, .intro, .controls, #message, .mistakes { text-align: center; }
+  .intro { line-height: 1.5; }
+  #solved .group { text-align: center; padding: 15px; border-radius: 7px; margin: 8px 0; }
+  .group strong { display: block; text-transform: uppercase; }
+  #board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .tile { background: #e7e5df; border: 0; border-radius: 7px; min-height: 82px; padding: 7px; font-weight: bold; text-transform: uppercase; cursor: pointer; font-size: clamp(11px, 1.8vw, 17px); }
+  .tile.selected { color: white; background: #565657; }
+  .tile:focus-visible, button:focus-visible { outline: 3px solid #006ab2; }
+  .controls { margin: 20px 0; }
+  .controls button, select { border: 1px solid #333; border-radius: 20px; padding: 10px 14px; background: white; margin: 3px; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  #message { min-height: 2em; font-weight: bold; }
+  details { margin-top: 30px; line-height: 1.5; }
+  summary { cursor: pointer; font-weight: bold; }
+  .yellow { background: #f9df6d; } .green { background: #a0c35a; }
+  .blue { background: #b0c4ef; } .purple { background: #ba81c5; }
+</style>
+</head>
+<body>
+<h1 id="title">Vocabulary Connections</h1>
+<p class="intro">Find four groups of four related terms. Select four tiles, then press Submit.<br>You have four incorrect guesses. “One away” means three of your terms belong together.</p>
+<div class="controls"><label for="round">Choose a round:</label> <select id="round"></select></div>
+<p class="mistakes">Mistakes remaining: <strong id="mistakes">4</strong></p>
+<div id="solved" aria-live="polite"></div>
+<div id="board"></div>
+<div class="controls">
+  <button id="shuffle">Shuffle</button><button id="deselect">Deselect</button>
+  <button id="submit">Submit</button><button id="restart">Restart round</button>
+</div>
+<p id="message" role="status" aria-live="polite"></p>
+<details id="key"><summary>Teacher answer key (open after playing)</summary><div id="keyContents"></div></details>
+<script>
+/*
+HOW TO REUSE NEXT YEAR
+1. Save this file. Open it in Notepad, VS Code, or any plain-text editor.
+2. Change the round titles, category names, and terms in PUZZLES below.
+3. Each round needs exactly four groups, each with exactly four DISTINCT terms.
+4. Add more rounds by copying one whole round object, with a comma between rounds.
+5. Save with a .html extension and open the file in any web browser.
+The answer key is generated automatically from your groups.
+*/
+const PUZZLES = [
+  {
+    title: "Unit 1 Connections — Round 1",
+    groups: [
+      { name: "Parts of working with a function", terms: ["Define a Function", "Call a Function", "Function Body", "Parameters"] },
+      { name: "Control structures that choose or repeat code", terms: ["For Loop", "While Loop", "If Statement", "If Else Statement"] },
+      { name: "Core algorithm ideas", terms: ["Algorithm", "Sequencing", "Iteration", "Selection"] },
+      { name: "Ways to manage program complexity", terms: ["Decomposition", "Top Down Design", "Abstraction", "Modularity"] }
+    ]
+  },
+  {
+    title: "Unit 1 Connections — Round 2",
+    groups: [
+      { name: "Ways to explain code", terms: ["Comment", "Pseudocode", "Documentation", "Karel Documentation"] },
+      { name: "Program correctness", terms: ["Precondition", "Postcondition", "Bug", "Debugging"] },
+      { name: "Karel and reusable commands", terms: ["Karel", "SuperKarel", "Function", "Procedural Abstraction"] },
+      { name: "The broader computing landscape", terms: ["Computer Science", "Moore's Law", "Cybercrime", "Application Programming Interfaces"] }
+    ]
+  }
+];
+
+const colors = ["yellow", "green", "blue", "purple"];
+const el = id => document.getElementById(id);
+let groups, remaining, selected, solved, mistakes, finished;
+function shuffle(items) {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+function start() {
+  const puzzle = PUZZLES[Number(el("round").value)];
+  groups = puzzle.groups;
+  if (groups.length !== 4 || groups.some(g => g.terms.length !== 4) || new Set(groups.flatMap(g => g.terms)).size !== 16) {
+    el("message").textContent = "Puzzle setup error: use four groups of four unique terms.";
+    return;
+  }
+  el("title").textContent = puzzle.title;
+  remaining = shuffle(groups.flatMap(g => g.terms));
+  selected = new Set(); solved = []; mistakes = 4; finished = false;
+  el("key").open = false;
+  el("keyContents").replaceChildren();
+  groups.forEach((g, i) => {
+    const p = document.createElement("p");
+    p.textContent = `${colors[i].toUpperCase()} — ${g.name}: ${g.terms.join(", ")}`;
+    el("keyContents").append(p);
+  });
+  render("Select four related terms.");
+}
+function render(message) {
+  el("message").textContent = message;
+  el("mistakes").textContent = mistakes;
+  el("solved").replaceChildren();
+  solved.forEach(g => {
+    const box = document.createElement("div");
+    box.className = `group ${colors[groups.indexOf(g)]}`;
+    const label = document.createElement("strong"); label.textContent = g.name;
+    box.append(label, document.createTextNode(g.terms.join(" · ")));
+    el("solved").append(box);
+  });
+  el("board").replaceChildren();
+  remaining.forEach(term => {
+    const button = document.createElement("button");
+    button.className = `tile${selected.has(term) ? " selected" : ""}`;
+    button.textContent = term;
+    button.setAttribute("aria-pressed", String(selected.has(term)));
+    button.addEventListener("click", () => {
+      if (finished) return;
+      if (selected.has(term)) selected.delete(term);
+      else if (selected.size < 4) selected.add(term);
+      render(el("message").textContent);
+    });
+    el("board").append(button);
+  });
+  el("submit").disabled = finished || selected.size !== 4;
+  el("shuffle").disabled = finished;
+  el("deselect").disabled = finished;
+}
+el("submit").addEventListener("click", () => {
+  if (finished || selected.size !== 4) return;
+  const match = groups.find(g => !solved.includes(g) && g.terms.every(t => selected.has(t)));
+  if (match) {
+    solved.push(match);
+    remaining = remaining.filter(t => !selected.has(t));
+    selected.clear();
+    if (solved.length === 4) finished = true;
+    render(finished ? "Excellent! You found all four groups." : `Correct: ${match.name}.`);
+    return;
+  }
+  const oneAway = groups.some(g => !solved.includes(g) && g.terms.filter(t => selected.has(t)).length === 3);
+  mistakes--; selected.clear();
+  if (mistakes === 0) {
+    finished = true; solved.push(...groups.filter(g => !solved.includes(g))); remaining = [];
+    render("Game over. Review the groups above, then restart.");
+  } else render(oneAway ? "One away! Three of your four terms belong together." : "That is not a group. Try again.");
+});
+el("shuffle").addEventListener("click", () => { remaining = shuffle(remaining); render("Tiles shuffled."); });
+el("deselect").addEventListener("click", () => { selected.clear(); render("Selection cleared."); });
+el("restart").addEventListener("click", start);
+el("round").addEventListener("change", start);
+PUZZLES.forEach((p, i) => { const option = document.createElement("option"); option.value = i; option.textContent = `Round ${i + 1}`; el("round").append(option); });
+start();
+</script>
+</body>
+</html>
